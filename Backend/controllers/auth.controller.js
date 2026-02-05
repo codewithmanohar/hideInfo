@@ -5,27 +5,32 @@ import jwt from "jsonwebtoken"
 
 export const signInController = async (req, res) => {
     try {
-        const { email , password } = req.body; 
+        const { email, password } = req.body;
 
-        if(!email || !password){
-            res.status(404).json({message : "All fields are required "});
-        }
+        if (!email || !password) {
+            res.status(404).json({ message: "All fields are required" });
+        };
 
-        const user = await userModel.findOne({email});
+        const user = await userModel.findOne({ email });
 
         const match = await bcrypt.compare(password, user.password);
 
-        if(!match){
-            res.status(404).json({message : "invalid creditionals"}); 
+        if (!match) {
+            res.status(404).json({ message: "invalid creditionals" });
         };
-        
-        const token = await jwt.sign({id : user._id}, process.env.SCRECT_KEY, {expiresIn : "1h"});
 
-        res.status(200).json({
-            message : "success",
-            token
+        const token = await jwt.sign({ id: user._id }, process.env.SECRET_KEY, { expiresIn: "1h" });
+        res.cookie("token", token, {
+            maxAge: 7 * 24 * 60 * 60 * 1000, // ms
+            httpOnly: true, // prevent XSS attacks cross-site scripting attacks 
+            samesite: "script", // CSRF cross-site request forgery attacks 
+            secure: process.env.NODE_ENV !== "development" // if not development then true  
         });
-    }catch (error){
+
+        res.status(201).json({
+            message: "success",
+        });
+    } catch (error) {
         console.log(`Error in signIn : ${error.message}`);
     }
 }
