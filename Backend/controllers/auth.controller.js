@@ -1,69 +1,58 @@
-import userModel from "../models/user.js"
-import bcrypt from "bcrypt"
-import jwt from "jsonwebtoken"
+import bcrypt from "bcrypt";
+import jwt from "jsonwebtoken";
+import User from "../models/User.js";
+import { cookieOptions } from "../utils/cookie.js";
+import { generateSaltBase64 } from "../utils/crypto.js";
 
+export async function register(req, res) {
+  const { name, email, password } = req.body || {};
+  if (!email || !password) return res.status(400).json({ message: "Email and password required" });
+  if (password.length < 8) return res.status(400).json({ message: "Password must be 8+ characters" });
 
-export const signInController = async (req, res) => {
-    try {
-        const { email, password } = req.body;
+  const exists = await User.findOne({ email });
+  if (exists) return res.status(409).json({ message: "Email already registered" });
 
-        if (!email || !password) {
-            res.status(404).json({ message: "All fields are required" });
-        };
+  const passwordHash = await bcrypt.hash(password, 12);
+  const kdfSalt = generateSaltBase64();
 
-        const user = await userModel.findOne({ email });
+  const user = await User.create({ name, email, passwordHash, kdfSalt });
 
-        const match = await bcrypt.compare(password, user.password);
-
-        if (!match) {
-            res.status(404).json({ message: "invalid creditionals" });
-        };
-
-        const token = await jwt.sign({ id: user._id }, process.env.SECRET_KEY, { expiresIn: "1h" });
-        res.cookie("token", token, {
-            maxAge: 7 * 24 * 60 * 60 * 1000, // ms
-            httpOnly: true, // prevent XSS attacks cross-site scripting attacks 
-            samesite: "script", // CSRF cross-site request forgery attacks 
-            secure: process.env.NODE_ENV !== "development" // if not development then true  
-        });
-
-        res.status(201).json({
-            message: "success",
-        });
-    } catch (error) {
-        console.log(`Error in signIn : ${error.message}`);
-    }
+  return res.status(201).json({
+    message: "Registered",
+    user: { id: user._id, name: user.name, email: user.email }
+  });
 }
 
-export const SignUpController = async (req, res) => {
-    try {
-        const { first_name, last_name, email, password } = req.body;
+export async function login(req, res) {
+  const { email, password } = req.body || {};
+  if (!email || !password) return res.status(400).json({ message: "Email and password required" });
 
-        if (!first_name || !email || !last_name || !password) {
-            res.staus(404).json({ message: "All fields Required" });
-        };
+  const user = await User.findOne({ email });
+  if (!user) return res.status(401).json({ message: "Invalid credentials" });
 
-        const check_user = await userModel.findOne({ email });
+  const ok = await bcrypt.compare(password, user.passwordHash);
+  if (!ok) return res.status(401).json({ message: "Invalid credentials" });
 
-        if (check_user) res.status(401).json({ message: "User already Exits" });
+  const token = jwt.sign(
+    { id: user._id.toString(), email: user.email },
+    process.env.JWT_SECRET,
+    { expiresIn: "7d" }
+  );
 
-        const hashPassword = await bcrypt.hash(password, 10);
+  res.cookie(process.env.COOKIE_NAME, token, cookieOptions());
 
-        const response = await userModel.create({
-            first_name,
-            last_name,
-            email,
-            password: hashPassword,
-        });
+  return res.json({
+    message: "Logged in",
+    user: { id: user._id, name: user.name, email: user.email }
+  });
+}
 
+export async function logout(req, res) {
+  res.clearCookie(process.env.COOKIE_NAME, cookieOptions());
+  return res.json({ message: "Logged out" });
+}
 
-        res.status(201).json({
-            message: "User Register Successfully !",
-            user_id: response._id,
-        });
-
-
-    } catch (error) {
-        res.json(error.message);
-    }
+export async function me(req, res) {
+  const user = await User.findById(req.user.id).select("_id name email createdAt");
+  return res.json({ user });
 }

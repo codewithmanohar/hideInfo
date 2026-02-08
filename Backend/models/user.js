@@ -1,27 +1,13 @@
 import mongoose from "mongoose";
 
-const userSchema = mongoose.Schema({
-    first_name : {
-        required : true,
-        type  : String,
-    }, 
-    last_name : {
-        type: String, 
-    },
-    email : {
-        type : String,
-        required: true, 
-        unique : true
-    },
-    password : {
-        type: String , 
-        required: true,
-        minlenghth : 6
-    }
-},
-    {timestamps : true }
+const userSchema = new mongoose.Schema(
+  {
+    name: { type: String, trim: true },
+    email: { type: String, unique: true, required: true, lowercase: true, trim: true },
+    passwordHash: { type: String, required: true },
+    kdfSalt: { type: String, required: true } // base64 salt for scrypt
+  },
+  { timestamps: true }
 );
 
-const userModel = mongoose.model("users", userSchema);
-
-export default userModel ; 
+export default mongoose.model("User", userSchema);
